@@ -1,4 +1,3 @@
-#include <array>
 #include <atomic>
 #include <bit>
 #include <cstdint>
@@ -107,6 +106,11 @@ private:
     std::atomic<int64_t> tail;
     std::deque<Slot<T>> slots;
 
+    /**
+     * @brief roundUpToPowerOf2 - Takes a number and rounds it up to the nearest power of 2 integer.
+     * @param n - the number to round up.
+     * @return - the nearest power of 2 integer greater than or equal to n.
+     */
     uint64_t roundUpToPowerOf2(uint64_t n)
     {
         if (n == 0)
