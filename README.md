@@ -1,10 +1,88 @@
 # LockFreeRingBuffer
-A Lock-Free Ring Buffer implementation in C++.
 
-## Build & Test Instructions
+A header-only, lock-free Multi-Producer Multi-Consumer (MPMC) bounded ring buffer implemented in C++20.
+
+## Overview
+
+`LockFreeRingBuffer` is a bounded FIFO queue designed for concurrent systems. Multiple producers and consumers can push and pop elements concurrently without mutexes or kernel locks.
+
+- **Lock-Free MPMC:** Safe for concurrent access across multiple producer and consumer threads.
+- **Power-of-2 Sizing:** Requested buffer capacity is automatically rounded up to the nearest power of 2 for fast indexing.
+- **Header-Only:** Single header file (`lfrb.hpp`), zero external dependencies.
+- **Requirements:** C++20 compliant compiler, CMake 3.20+.
+
+## Integration (CMake)
+
+The library provides an `INTERFACE` CMake target `LockFreeRingBuffer::LockFreeRingBuffer`.
+
+### Using `FetchContent` (Recommended)
+
+```cmake
+include(FetchContent)
+
+FetchContent_Declare(
+    LockFreeRingBuffer
+    GIT_REPOSITORY https://github.com/Abhiroopks/LockFreeRingBuffer.git
+    GIT_TAG        main # or a specific tag/commit
+)
+FetchContent_MakeAvailable(LockFreeRingBuffer)
+
+target_link_libraries(my_target PRIVATE LockFreeRingBuffer::LockFreeRingBuffer)
+```
+
+### Using `add_subdirectory`
+
+If vendored or added as a Git submodule:
+
+```cmake
+add_subdirectory(path/to/LockFreeRingBuffer EXCLUDE_FROM_ALL)
+target_link_libraries(my_target PRIVATE LockFreeRingBuffer::LockFreeRingBuffer)
+```
+
+> **Note:** Ensure your target enables C++20 (e.g. `set(CMAKE_CXX_STANDARD 20)` or `target_compile_features(my_target PRIVATE cxx_std_20)`).
+
+## Usage
+
+Include `lfrb.hpp` and instantiate `LockFreeRingBuffer<T>` with your desired capacity:
+
+```cpp
+#include <lfrb.hpp>
+#include <iostream>
+#include <string>
+
+int main() {
+    // Capacity rounds up to the next power of 2 (e.g., 10 -> 16)
+    LockFreeRingBuffer<std::string> buffer(10);
+
+    // push() accepts rvalues; returns false if full
+    buffer.push("hello");
+
+    std::string val = "world";
+    buffer.push(std::move(val));
+
+    // pop() takes an output reference; returns false if empty
+    std::string item;
+    while (buffer.pop(item)) {
+        std::cout << item << '\n';
+    }
+
+    return 0;
+}
+```
+
+### API Summary
+
+| Method | Description |
+| --- | --- |
+| `explicit LockFreeRingBuffer(int size)` | Constructs a buffer with capacity rounded up to the nearest power of 2. |
+| `bool push(T &&elem)` | Enqueues an rvalue. Returns `true` on success, `false` if the buffer is full. |
+| `bool pop(T &dest)` | Dequeues the oldest element into `dest`. Returns `true` on success, `false` if empty. |
+
+## Build & Test
+
+To build and run the test suite locally:
 
 ```bash
-
 # Configure
 cmake -B build -S .
 
@@ -15,66 +93,6 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-## The Protocol
+## License
 
-Each slot has two fields: the payload and an std::atomic<int64_t> sequence.
-
-slot: { T data; std::atomic<int64_t> seq; }
-
-
-### Producer (push):
-
-```cpp
-bool push(T val) {
-    int64_t pos = tail.load(std::memory_order_relaxed);
-    for (;;) {
-        Slot& s = slots[pos & MASK];
-        int64_t seq = s.seq.load(std::memory_order_acquire);
-        int64_t diff = seq - pos;
-
-        if (diff == 0) {
-            // Slot is ready for this position — try to claim it
-            if (tail.compare_exchange_weak(pos, pos + 1,
-                    std::memory_order_acq_rel))
-                break;  // We exclusively own this slot now
-        } else if (diff < 0) {
-            return false;  // Buffer full
-        }
-        // diff > 0: another producer claimed it but hasn't published yet; spin
-    }
-
-    // Plain (non-atomic) write — only this thread touches this slot
-    s.data = val;
-
-    // Publish: release ensures the data write is visible before the seq update
-    s.seq.store(pos + 1, std::memory_order_release);
-    return true;
-}
-```
-
-
-
-### Consumer (pop):
-
-```cpp
-bool pop(T& out) {
-    int64_t pos = head.load(std::memory_order_relaxed);
-    for (;;) {
-        Slot& s = slots[pos & MASK];
-        int64_t seq = s.seq.load(std::memory_order_acquire);
-        int64_t diff = seq - (pos + 1);
-
-        if (diff == 0) {
-            // Data is published — try to claim the read
-            if (head.compare_exchange_weak(pos, pos + 1,
-                    std::memory_order_acq_rel)) {
-                out = s.data;  // Plain read — safe, we own it
-                s.seq.store(pos + CAPACITY, std::memory_order_release);
-                return true;
-            }
-        } else if (diff < 0) {
-            return false;  // Buffer empty
-        }
-    }
-}
-```
+This project is licensed under the [Apache License 2.0](LICENSE).
