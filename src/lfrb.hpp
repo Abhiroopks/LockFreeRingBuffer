@@ -42,14 +42,15 @@ public:
 
     /*
      * @brief push - adds an element to the tail position.
-     * @param elem - element to add. const reference.
+     * @param elem - element to add. rvalue.
      * @return - success or fail (bool) for push of element.
      */
-    bool push(const T &elem)
+    bool push(T &&elem)
     {
-        int64_t pos = tail.load(std::memory_order_relaxed);
+        int64_t pos;
         Slot<T> *s;
         for (;;) {
+            pos = tail.load(std::memory_order_relaxed);
             s = &slots[pos & m_mask];
             int64_t seq = s->state.load(std::memory_order_acquire);
             int64_t diff = seq - pos;
@@ -65,13 +66,20 @@ public:
         }
 
         // Plain (non-atomic) write — only this thread touches this slot
-        s->data = std::move(elem);
+        s->data = elem;
 
         // Publish: release ensures the data write is visible before the seq update
         s->state.store(pos + 1, std::memory_order_release);
 
         return true;
     }
+
+    /*
+     * @brief push - adds an element to the tail position.
+     * @param elem - element to add. lvalue ref.
+     * @return - success or fail (bool) for push of element.
+     */
+    bool push(T &elem) { this->push(std::move(elem)); }
 
     /**
      * @brief pop - Removes oldest element from the head.
@@ -80,17 +88,19 @@ public:
      */
     bool pop(T &dest)
     {
-        int64_t pos = head.load(std::memory_order_relaxed);
+        int64_t pos;
+        Slot<T> *s;
         for (;;) {
-            Slot<T> &s = slots[pos & m_mask];
-            int64_t seq = s.state.load(std::memory_order_acquire);
+            int64_t pos = head.load(std::memory_order_relaxed);
+            s = &slots[pos & m_mask];
+            int64_t seq = s->state.load(std::memory_order_acquire);
             int64_t diff = seq - (pos + 1);
 
             if (diff == 0) {
                 // Data is published — try to claim the read
                 if (head.compare_exchange_weak(pos, pos + 1, std::memory_order_acq_rel)) {
-                    dest = s.data; // Plain read — safe, we own it
-                    s.state.store(pos + m_size, std::memory_order_release);
+                    dest = s->data; // Plain read — safe, we own it
+                    s->state.store(pos + m_size, std::memory_order_release);
                     return true;
                 }
             } else if (diff < 0) {

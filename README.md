@@ -90,7 +90,10 @@ cmake -B build -S .
 cmake --build build
 
 # Run Tests
-ctest --test-dir build --output-on-failure
+./build/tests/bench
+
+# or
+./build/tests/lfrb_tests
 ```
 
 ## License

@@ -81,6 +81,34 @@ TEST(SingleThreadLFRBTest, EmptyPop)
     ASSERT_FALSE(success);
 }
 
+TEST(MultiThreadLFRBTest, HighContentionPush)
+{
+    const int numThreads = 4;
+    const int numElems = 4000;
+    const int elemsPerThread = numElems / numThreads;
+
+    LockFreeRingBuffer<int> buffer(numElems);
+    std::array<std::thread, numThreads> threads;
+    std::array<bool, numElems> success;
+    for (int i = 0; i < numThreads; i++) {
+        threads[i] = std::thread([i, &buffer, &success, elemsPerThread]() {
+            for (int j = 0; j < elemsPerThread; j++) {
+                success[(i * elemsPerThread) + j] = buffer.push(int(i * j));
+            }
+        });
+    }
+
+    for (int i = 0; i < numThreads; i++) {
+        if (threads[i].joinable()) {
+            threads[i].join();
+        }
+    }
+
+    for (auto i = 0; i < numElems; i++) {
+        ASSERT_TRUE(success[i]);
+    }
+}
+
 TEST(MultiThreadLFRBTest, EmptyPush)
 {
     const int N = 4;
