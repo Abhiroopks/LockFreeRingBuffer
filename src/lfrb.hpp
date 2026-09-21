@@ -40,12 +40,12 @@ public:
 
     ~LockFreeRingBuffer() {}
 
-    /**
+    /*
      * @brief push - adds an element to the tail position.
-     * @param elem - element to add. Only rvalues accepted.
+     * @param elem - element to add. const reference.
      * @return - success or fail (bool) for push of element.
      */
-    bool push(T &&elem)
+    bool push(const T &elem)
     {
         int64_t pos = tail.load(std::memory_order_relaxed);
         Slot<T> *s;
@@ -65,7 +65,7 @@ public:
         }
 
         // Plain (non-atomic) write — only this thread touches this slot
-        s->data = elem;
+        s->data = std::move(elem);
 
         // Publish: release ensures the data write is visible before the seq update
         s->state.store(pos + 1, std::memory_order_release);
