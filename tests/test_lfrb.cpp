@@ -1,6 +1,7 @@
 #include "lfrb.hpp"
 #include <algorithm>
 #include <gtest/gtest.h>
+#include <string>
 #include <thread>
 
 TEST(SingleThreadLFRBTest, Initialization)
@@ -13,6 +14,16 @@ TEST(SingleThreadLFRBTest, EmptyPush)
 {
     LockFreeRingBuffer<int> buffer(2);
     bool success = buffer.push(0);
+
+    ASSERT_TRUE(success);
+}
+
+TEST(SingleThreadLFRBTest, EmptyPushMove)
+{
+    LockFreeRingBuffer<std::string> buffer(2);
+
+    std::string elem = "Hello World! Testing Lock Free Ring Buffer.";
+    bool success = buffer.push(std::move(elem));
 
     ASSERT_TRUE(success);
 }
