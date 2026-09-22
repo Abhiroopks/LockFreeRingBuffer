@@ -84,7 +84,7 @@ To build and run the test suite locally:
 
 ```bash
 # Configure
-cmake -B build -S .
+cmake -DCMAKE_BUILD_TYPE=Release -B build -S .
 
 # Build
 cmake --build build
