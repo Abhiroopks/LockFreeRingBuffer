@@ -79,7 +79,7 @@ public:
      * @param elem - element to add. lvalue ref.
      * @return - success or fail (bool) for push of element.
      */
-    bool push(T &elem) { this->push(std::move(elem)); }
+    bool push(T &elem) { return this->push(std::move(elem)); }
 
     /**
      * @brief pop - Removes oldest element from the head.
@@ -88,10 +88,10 @@ public:
      */
     bool pop(T &dest)
     {
-        int64_t pos;
         Slot<T> *s;
+        int64_t pos;
         for (;;) {
-            int64_t pos = head.load(std::memory_order_relaxed);
+            pos = head.load(std::memory_order_relaxed);
             s = &slots[pos & m_mask];
             int64_t seq = s->state.load(std::memory_order_acquire);
             int64_t diff = seq - (pos + 1);

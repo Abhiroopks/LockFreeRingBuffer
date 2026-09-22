@@ -6,7 +6,6 @@
 #include <thread>
 #include <vector>
 
-
 // ─── Benchmark definition ──────────────────────────────────────────────────────
 
 struct Benchmark
@@ -116,11 +115,93 @@ void bench_enqueue()
               << elemsPerSecond << " elems/s) with " << NUM_THREADS << " threads\n";
 }
 
+void bench_combo()
+{
+    const auto SIZE = (1 << 13);
+    const auto NUM_THREADS = std::thread::hardware_concurrency();
+    const auto NUM_PUSH_THREADS = NUM_THREADS / 2;
+    const auto NUM_POP_THREADS = NUM_THREADS / 2;
+    const auto TOTAL_ELEMS = SIZE;
+
+    LockFreeRingBuffer<std::string> lfrb(SIZE);
+
+    std::vector<std::thread> pushThreads;
+
+    const auto elemsPerThread = TOTAL_ELEMS / (NUM_THREADS / 2);
+    std::atomic<bool> startFlag{false};
+
+    for (auto i = 0; i < NUM_PUSH_THREADS; i++) {
+        pushThreads.emplace_back([i, &lfrb, &startFlag, elemsPerThread]() {
+            // wait for startFlag
+            while (!startFlag.load()) {
+                std::this_thread::yield();
+            }
+
+            for (auto j = 0; j < elemsPerThread; j++) {
+                lfrb.push("test msg");
+            }
+        });
+    }
+
+    std::vector<std::thread> popThreads;
+    std::vector<bool> popSuccess(TOTAL_ELEMS, false);
+
+    for (auto i = 0; i < NUM_POP_THREADS; i++) {
+        popThreads.emplace_back([i, &popSuccess, &lfrb, &startFlag, elemsPerThread]() {
+            // wait for startFlag
+            while (!startFlag.load()) {
+                std::this_thread::yield();
+            }
+
+            std::string val;
+            int succIdx = i * elemsPerThread;
+            int succCount = 0;
+
+            while (succCount < elemsPerThread && !popSuccess[succIdx]) {
+                bool success = lfrb.pop(val);
+                if (success) {
+                    popSuccess[succIdx] = true;
+                }
+
+                succIdx++;
+                succCount++;
+            }
+        });
+    }
+
+    startFlag.store(true);
+
+    auto start = std::chrono::steady_clock::now();
+    for (auto &t : pushThreads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+    for (auto &t : popThreads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+
+    auto end = std::chrono::steady_clock::now();
+    auto diff = end - start;
+
+    double elapsedSeconds = std::chrono::duration<double>(diff).count();
+    double elemsPerSecond = static_cast<double>(TOTAL_ELEMS) / elapsedSeconds;
+
+    std::cout << "Pushed and popped " << TOTAL_ELEMS << " elements in "
+              << std::chrono::duration_cast<std::chrono::microseconds>(diff) << " ("
+              << elemsPerSecond << " elems/s) with " << NUM_PUSH_THREADS << " push threads and "
+              << NUM_POP_THREADS << " pop threads\n";
+}
+
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
 int main()
 {
-    std::vector<Benchmark> benchmarks = {{"Enqueue", bench_enqueue}, {"Dequeue", bench_dequeue}};
+    std::vector<Benchmark> benchmarks = {{"Enqueue", bench_enqueue},
+                                         {"Dequeue", bench_dequeue},
+                                         {"Combination", bench_combo}};
 
     for (auto &b : benchmarks) {
         std::cout << "\n=== " << b.name << " ===\n";
