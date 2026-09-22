@@ -1,5 +1,6 @@
 #include "lfrb.hpp"
 #include <algorithm>
+#include <chrono>
 #include <gtest/gtest.h>
 #include <string>
 #include <thread>
@@ -79,6 +80,169 @@ TEST(SingleThreadLFRBTest, EmptyPop)
     int dest;
     bool success = buffer.pop(dest);
     ASSERT_FALSE(success);
+}
+
+TEST(MultiThreadLFRBTest, HighContentionCombo)
+{
+    const auto SIZE = (1 << 10);
+    const auto NUM_THREADS = std::thread::hardware_concurrency();
+    const auto NUM_PUSH_THREADS = NUM_THREADS / 2;
+    const auto NUM_POP_THREADS = NUM_THREADS / 2;
+    const auto TOTAL_ELEMS = SIZE;
+
+    LockFreeRingBuffer<int> lfrb(SIZE);
+
+    std::vector<std::thread> pushThreads;
+
+    const auto elemsPerThread = TOTAL_ELEMS / (NUM_THREADS / 2);
+    std::atomic<bool> startFlag{false};
+    std::vector<bool> pushSuccess(TOTAL_ELEMS, false);
+
+    for (auto i = 0; i < NUM_PUSH_THREADS; i++) {
+        pushThreads.emplace_back([i, &pushSuccess, &lfrb, &startFlag, elemsPerThread]() {
+            // wait for startFlag
+            while (!startFlag.load()) {
+                std::this_thread::yield();
+            }
+
+            int succIdx = i * elemsPerThread;
+
+            for (auto j = 0; j < elemsPerThread; j++) {
+                pushSuccess[succIdx] = lfrb.push(j);
+                succIdx++;
+            }
+        });
+    }
+
+    std::vector<std::thread> popThreads;
+    std::vector<bool> popSuccess(TOTAL_ELEMS, false);
+
+    for (auto i = 0; i < NUM_POP_THREADS; i++) {
+        popThreads.emplace_back([i, &popSuccess, &lfrb, &startFlag, elemsPerThread]() {
+            // wait for startFlag
+            while (!startFlag.load()) {
+                std::this_thread::yield();
+            }
+
+            int val;
+            int succIdx = i * elemsPerThread;
+            int succCount = 0;
+
+            while (!popSuccess[succIdx] && succCount < elemsPerThread) {
+                if (lfrb.pop(val)) {
+                    popSuccess[succIdx] = true;
+                    succCount++;
+                    succIdx++;
+                }
+            }
+        });
+    }
+
+    startFlag.store(true);
+
+    for (auto &t : pushThreads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+    for (auto &t : popThreads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+
+    for (const auto &s : pushSuccess) {
+        ASSERT_TRUE(s);
+    }
+
+    for (const auto &s : popSuccess) {
+        ASSERT_TRUE(s);
+    }
+}
+
+TEST(MultiThreadLFRBTest, HighContentionPop)
+{
+    const unsigned int numThreads = std::thread::hardware_concurrency();
+    const unsigned int numElems = (1 << 13);
+    const unsigned int elemsPerThread = numElems / numThreads;
+
+    LockFreeRingBuffer<int> buffer(numElems);
+
+    // fill the buffer first (single threaded)
+    for (auto i = 0; i < numElems; i++) {
+        buffer.push(i);
+    }
+
+    std::vector<std::thread> threads;
+    std::vector<bool> success(numElems, false);
+    std::atomic<bool> startFlag{false};
+
+    for (int i = 0; i < numThreads; i++) {
+        threads.emplace_back([i, &startFlag, &buffer, &success, elemsPerThread]() {
+            while (!startFlag.load()) {
+                std::this_thread::yield();
+            }
+
+            int val;
+            int succIdx = i * elemsPerThread;
+            int succCount = 0;
+
+            while (!success[succIdx] && succCount < elemsPerThread) {
+                if (buffer.pop(val)) {
+                    success[succIdx] = true;
+                    succCount++;
+                    succIdx++;
+                }
+            }
+        });
+    }
+
+    startFlag.store(true);
+
+    for (int i = 0; i < numThreads; i++) {
+        if (threads[i].joinable()) {
+            threads[i].join();
+        }
+    }
+
+    for (auto i = 0; i < numElems; i++) {
+        ASSERT_TRUE(success[i]);
+    }
+}
+TEST(MultiThreadLFRBTest, HighContentionPush)
+{
+    const int numThreads = 4;
+    const int numElems = 4000;
+    const int elemsPerThread = numElems / numThreads;
+
+    LockFreeRingBuffer<int> buffer(numElems);
+    std::vector<std::thread> threads;
+    std::vector<bool> success(numElems, false);
+    std::atomic<bool> startFlag{false};
+
+    for (int i = 0; i < numThreads; i++) {
+        threads.emplace_back([i, &startFlag, &buffer, &success, elemsPerThread]() {
+            while (!startFlag.load()) {
+                std::this_thread::yield();
+            }
+
+            for (int j = 0; j < elemsPerThread; j++) {
+                success[(i * elemsPerThread) + j] = buffer.push(int(i * j));
+            }
+        });
+    }
+
+    startFlag.store(true);
+
+    for (int i = 0; i < numThreads; i++) {
+        if (threads[i].joinable()) {
+            threads[i].join();
+        }
+    }
+
+    for (auto i = 0; i < numElems; i++) {
+        ASSERT_TRUE(success[i]);
+    }
 }
 
 TEST(MultiThreadLFRBTest, EmptyPush)

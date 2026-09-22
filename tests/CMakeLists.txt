@@ -14,10 +14,17 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(lfrb_tests test_lfrb.cpp)
 
+add_executable(bench bench.cpp)
+
 target_link_libraries(lfrb_tests
     PRIVATE
         LockFreeRingBuffer
         GTest::gtest_main
+)
+
+target_link_libraries(bench
+    PRIVATE
+        LockFreeRingBuffer
 )
 
 include(GoogleTest)
