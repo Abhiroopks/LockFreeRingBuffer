@@ -1,0 +1,44 @@
+name: Automated Tests
+
+on:
+  pull_request:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test (${{ matrix.compiler }} - Release
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        compiler: [gcc, clang]
+        include:
+          - compiler: gcc
+            c_compiler: gcc
+            cxx_compiler: g++
+          - compiler: clang
+            c_compiler: clang
+            cxx_compiler: clang++
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: >
+          cmake -B ${{ github.workspace }}/build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }}
+
+      - name: Build Library and Test Suite
+        run: cmake --build ${{ github.workspace }}/build --config Release --parallel
+
+      - name: Run Test Suite
+        run: ./build/tests/lfrb_tests
+
+      - name: Run Performance Benchmarks
+        run: ./build/tests/bench

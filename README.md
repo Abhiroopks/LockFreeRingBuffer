@@ -76,6 +76,7 @@ int main() {
 | --- | --- |
 | `explicit LockFreeRingBuffer(int size)` | Constructs a buffer with capacity rounded up to the nearest power of 2. |
 | `bool push(T &&elem)` | Enqueues an rvalue. Returns `true` on success, `false` if the buffer is full. |
+| `bool push(T &elem)` | Enqueues an lvalue ref. Performs internal move. Returns `true` on success, `false` if the buffer is full. |
 | `bool pop(T &dest)` | Dequeues the oldest element into `dest`. Returns `true` on success, `false` if empty. |
 
 ## Build & Test
