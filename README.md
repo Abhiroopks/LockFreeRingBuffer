@@ -91,10 +91,10 @@ cmake -DCMAKE_BUILD_TYPE=Release -B build -S .
 cmake --build build
 
 # Run Tests
-./build/tests/bench
-
-# or
 ./build/tests/lfrb_tests
+
+# Or run benchmarks
+./build/tests/bench
 ```
 
 ## License
