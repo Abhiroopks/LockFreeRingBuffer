@@ -1,7 +1,7 @@
 #include <atomic>
 #include <bit>
 #include <cstdint>
-#include <deque>
+#include <vector>
 
 #pragma once
 
@@ -10,11 +10,6 @@ struct Slot
 {
     T data;
     std::atomic<int64_t> state;
-
-    Slot(T _data, int64_t _state)
-        : data(_data)
-        , state(_state)
-    {}
 };
 
 template<typename T>
@@ -26,9 +21,10 @@ public:
         , head(0)
         , m_size(roundUpToPowerOf2(size))
         , m_mask(m_size - 1)
+        , slots(m_size)
     {
         for (auto i = 0; i < m_size; i++) {
-            slots.emplace_back(T(), i);
+            slots[i].state = i;
         }
     }
 
@@ -114,7 +110,7 @@ private:
     const int64_t m_mask;
     std::atomic<int64_t> head;
     std::atomic<int64_t> tail;
-    std::deque<Slot<T>> slots;
+    std::vector<Slot<T>> slots;
 
     /**
      * @brief roundUpToPowerOf2 - Takes a number and rounds it up to the nearest power of 2 integer.
