@@ -1,6 +1,5 @@
 #include "lfrb.hpp"
 #include <algorithm>
-#include <chrono>
 #include <gtest/gtest.h>
 #include <string>
 #include <thread>
@@ -394,5 +393,58 @@ TEST(MultiThreadLFRBTest, PopFail)
     // ensure the items pushed are actually popped.
     for (auto i = 0; i < numPushThreads; i++) {
         ASSERT_EQ(pops[i], i);
+    }
+}
+
+// verify the copy constructors, move constructors, copy assignment op, and move assignment op work.
+TEST(BasicLFRBTest, test_constructors)
+{
+    const int N = 3;
+
+    LockFreeRingBuffer<int> orig(N);
+    orig.push(1);
+    orig.push(2);
+    orig.push(3);
+
+    // Copy Constructor
+    LockFreeRingBuffer<int> copyCons(orig);
+
+    // Copy Assignment
+    LockFreeRingBuffer<int> copyAssign = orig;
+
+    // pop elements one by one and verify they're equivalent.
+    int origVal, copyConsVal, copyAssignVal;
+    for (auto i = 0; i < N; i++) {
+        orig.pop(origVal);
+        copyCons.pop(copyConsVal);
+        copyAssign.pop(copyAssignVal);
+
+        ASSERT_EQ(origVal, copyConsVal);
+        ASSERT_EQ(origVal, copyAssignVal);
+    }
+
+    orig.push(4);
+    orig.push(5);
+    orig.push(6);
+
+    // Move Cons
+    LockFreeRingBuffer<int> moveCons(std::move(orig));
+
+    int moveConsVal;
+    for (auto i = 0; i < N; i++) {
+        moveCons.pop(moveConsVal);
+        ASSERT_EQ(i + 4, moveConsVal);
+    }
+
+    moveCons.push(7);
+    moveCons.push(8);
+    moveCons.push(9);
+
+    // Move Assign
+    LockFreeRingBuffer<int> moveAssign = std::move(moveCons);
+    int moveAssignVal;
+    for (auto i = 0; i < N; i++) {
+        moveAssign.pop(moveAssignVal);
+        ASSERT_EQ(i + 7, moveAssignVal);
     }
 }

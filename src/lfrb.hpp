@@ -29,10 +29,49 @@ public:
     }
 
     LockFreeRingBuffer() = delete;
-    LockFreeRingBuffer(const LockFreeRingBuffer &other) = delete;
-    LockFreeRingBuffer(LockFreeRingBuffer &&other) = delete;
-    LockFreeRingBuffer &operator=(const LockFreeRingBuffer &other) = delete;
-    LockFreeRingBuffer &operator=(LockFreeRingBuffer &other) = delete;
+    LockFreeRingBuffer(const LockFreeRingBuffer &other)
+        : tail(other.tail.load())
+        , head(other.head.load())
+        , m_size(other.m_size)
+        , m_mask(other.m_mask)
+        , slots(m_size)
+    {
+        for (auto i = 0; i < m_size; i++) {
+            slots[i].data = other.slots[i].data;
+            slots[i].state = other.slots[i].state.load();
+        }
+    }
+    LockFreeRingBuffer(LockFreeRingBuffer &&other)
+        : tail(other.tail.load())
+        , head(other.head.load())
+        , m_size(other.m_size)
+        , m_mask(other.m_mask)
+        , slots(std::move(other.slots))
+    {}
+
+    LockFreeRingBuffer &operator=(const LockFreeRingBuffer &other)
+    {
+        this->tail = other.tail;
+        this->head = other.head;
+        this->m_size = other.m_size;
+        this->m_mask = other.m_mask;
+
+        this->slots.clear();
+        this->slots.reserve(m_size);
+        for (auto i = 0; i < m_size; i++) {
+            slots[i].data = other.slots[i].data;
+            slots[i].state = other.slots[i].state.load();
+        }
+    }
+
+    LockFreeRingBuffer &operator=(LockFreeRingBuffer &&other)
+    {
+        this->tail = other.tail;
+        this->head = other.head;
+        this->m_size = other.m_size;
+        this->m_mask = other.m_mask;
+        this->slots = std::move(other.slots);
+    }
 
     ~LockFreeRingBuffer() {}
 
